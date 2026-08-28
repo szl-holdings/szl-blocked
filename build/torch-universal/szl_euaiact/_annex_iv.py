@@ -111,9 +111,9 @@ def _coerce_chain(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Accept several honest shapes for the provenance chain.
 
     Supported:
-      * record[\"chain\"] as a list of receipt dicts
-      * record[\"chain\"] as a JSON string (UnifiedReceiptChain.to_json output)
-      * record[\"chain_json\"] as a JSON string
+      * record["chain"] as a list of receipt dicts
+      * record["chain"] as a JSON string (UnifiedReceiptChain.to_json output)
+      * record["chain_json"] as a JSON string
     Returns [] if no chain is present (the doc then says so honestly).
     """
     chain = record.get("chain")
@@ -263,7 +263,7 @@ def _verify_export(record: Dict[str, Any], chain: List[Dict[str, Any]]) -> Dict[
     }
 
 
-def _inline_verify(chain: List[Dict[str, Any]):
+def _inline_verify(chain: List[Dict[str, Any]]):
     genesis = "0" * 64
     prev = genesis
     for i, rec in enumerate(chain):
