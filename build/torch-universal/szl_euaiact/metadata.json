@@ -1,0 +1,13 @@
+{
+  "name": "szl_euaiact",
+  "version": "0.1.0",
+  "summary": "EU AI Act Annex IV-style technical-documentation SKELETON auto-derived from szl_kernels governance provenance",
+  "license": "Apache-2.0",
+  "universal": true,
+  "requires": [],
+  "doctrine": "DRAFT skeleton only — NOT legal advice and NOT a conformity guarantee; provenance-derived sections reflect ONLY what the receipt chain recorded; missing human input is emitted as explicit TODO markers, never invented; Lambda advisory (Conjecture 1, OPEN); energy MEASURED-only; honest-BLOCKED events surfaced as governance evidence",
+  "companion_package": "szl_blocked",
+  "suite": "SZLHOLDINGS/szl-kernels",
+  "schema": "szl-annex-iv-skeleton/0.1.0",
+  "prior_art": "EU AI Act Annex IV; SPDX 3.0 AI profile / AI BOM"
+}
