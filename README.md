@@ -6,6 +6,8 @@ Source is this GitHub tree. Hub mirror: [`kernels/SZLHOLDINGS/szl-blocked`](http
 
 ## What this is NOT
 
+- Hub `model.joblib` is **QUARANTINED** executable serialization. Do not `joblib.load` it. GitHub source is the approved path.
+
 - Not FlashAttention, not a drop-in blocker library
 - No MEASURED latency or CUDA benches in this repo
 - Not trained weights
