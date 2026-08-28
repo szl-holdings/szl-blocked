@@ -1,2 +1,1 @@
-# szl-blocked
-Canonical GitHub source for the szl-blocked Kernel Hub package (honest BLOCKED, fail-closed). Hub is the publish mirror. Apache-2.0 · Doctrine v11.
+Canonical GitHub source for SZLHOLDINGS/szl-blocked. Hub = publish mirror. ATELIER owns Hub cards. Do not treat Hub README as source of truth. Λ = Conjecture 1. Apache-2.0. Copyright 2026 SZL Holdings.

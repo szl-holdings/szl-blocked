@@ -1,0 +1,8 @@
+[general]
+name = "szl_blocked"
+
+[torch]
+universal = true
+
+[torch-noarch]
+src = "torch-ext/szl_blocked"
