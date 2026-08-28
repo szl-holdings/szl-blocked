@@ -111,9 +111,9 @@ def _coerce_chain(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Accept several honest shapes for the provenance chain.
 
     Supported:
-      * record[\"chain\"] as a list of receipt dicts
-      * record[\"chain\"] as a JSON string (UnifiedReceiptChain.to_json output)
-      * record[\"chain_json\"] as a JSON string
+      * record["chain"] as a list of receipt dicts
+      * record["chain"] as a JSON string (UnifiedReceiptChain.to_json output)
+      * record["chain_json"] as a JSON string
     Returns [] if no chain is present (the doc then says so honestly).
     """
     chain = record.get("chain")
@@ -151,6 +151,7 @@ def _summarize_chain(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "digest": rec.get("digest"),
             }
         )
+        # advisory Λ receipts (from lambda_gate OR a gate decision)
         if "lambda_status" in attrs or (
             kern == "lambda_gate" and "score" in attrs
         ):
@@ -165,6 +166,7 @@ def _summarize_chain(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
                     else attrs.get("advisory_passed"),
                 }
             )
+        # energy receipts — MEASURED-only honesty preserved verbatim
         if kern == "energy_core" or "joules" in attrs:
             energy_events.append(
                 {
@@ -174,6 +176,7 @@ def _summarize_chain(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "source": attrs.get("source"),
                 }
             )
+        # honest-BLOCKED / governed-gate verdicts from szl_blocked
         if attrs.get("verdict") == "BLOCK" or attrs.get("dominant") in (
             "HARD_SECURITY",
             "ADVISORY_LAMBDA",
@@ -195,6 +198,7 @@ def _summarize_chain(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
                 {"seq": rec.get("seq"), "op": rec.get("op"), "digest": rec.get("digest")}
             )
 
+    # MEASURED-only energy disclosure
     measured = [
         e
         for e in energy_events
@@ -202,7 +206,7 @@ def _summarize_chain(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
     ]
     total_measured = sum(float(e["joules"]) for e in measured) if measured else None
     energy_disclosure = {
-        "measured_joules_total": total_measured,
+        "measured_joules_total": total_measured,  # None when nothing MEASURED
         "n_measured_readings": len(measured),
         "n_energy_receipts": len(energy_events),
         "labels_seen": sorted({str(e.get("label")) for e in energy_events}),
@@ -272,7 +276,21 @@ def _inline_verify(chain: List[Dict[str, Any]]):
 
 
 def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Derive a structured Annex IV-style skeleton from a governance record."""
+    """Derive a structured Annex IV-style skeleton from a governance record.
+
+    Parameters
+    ----------
+    record : dict
+        {
+          "system": { optional human metadata: name, provider, version,
+                      intended_purpose, deployment_context, ... },
+          "chain":  list[receipt] OR JSON string from UnifiedReceiptChain,
+        }
+
+    Returns a JSON-able dict with: schema_version, disclaimer, generated_digest,
+    prior_art, provenance_summary, integrity, and an ``annex_iv`` mapping over
+    the nine elements. Human gaps are explicit TODO markers — never invented.
+    """
     record = dict(record or {})
     system = dict(record.get("system") or {})
     chain = _coerce_chain(record)
@@ -284,6 +302,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
         return v if (v is not None and v != "") else None
 
     annex = {
+        # 1. General description of the AI system.
         "1_general_description": {
             "system_name": have("name") or _todo("AI system name"),
             "provider": have("provider") or _todo("provider / responsible entity"),
@@ -295,6 +314,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
                 "n_governed_ops_recorded": prov["n_receipts"],
             },
         },
+        # 2. Detailed description of elements and development process.
         "2_detailed_description_elements_and_development": {
             "development_process": have("development_process")
             or _todo("development process description"),
@@ -304,6 +324,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
             "data_provenance": have("data_provenance")
             or _todo("training/validation/test data provenance"),
         },
+        # 3. Monitoring, functioning and control of the system.
         "3_monitoring_functioning_control": {
             "governance_controls_observed": {
                 "advisory_lambda_gate_evaluations": len(prov["lambda_events"]),
@@ -319,6 +340,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
                 "output. HARD security deny dominates advisory Λ."
             ),
         },
+        # 4. Appropriateness of performance metrics.
         "4_performance_metrics_appropriateness": {
             "performance_metrics": have("performance_metrics")
             or _todo("validated performance metrics + methodology"),
@@ -328,6 +350,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
                 "Any metric must be supplied and validated by the provider."
             ),
         },
+        # 5. Risk management system.
         "5_risk_management_system": {
             "lambda_advisory_caveat": (
                 "Λ is an ADVISORY weighted-geometric-mean aggregator. Its "
@@ -341,6 +364,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
             "spdx_safety_risk_assessment": have("safety_risk_assessment")
             or _todo("SPDX AI SafetyRiskAssessmentType (low/medium/high/serious)"),
         },
+        # 6. Lifecycle / changes made through the system's lifecycle.
         "6_lifecycle_changes": {
             "change_log": have("change_log") or _todo("lifecycle change log"),
             "provenance_head_digest": prov["head_digest"],
@@ -349,11 +373,13 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
                 "successive runs produce successive heads for change tracking."
             ),
         },
+        # 7. Standards and specifications applied.
         "7_standards_applied": {
             "standards": have("standards")
             or _todo("harmonised standards / specifications applied"),
             "prior_art_referenced": [p["name"] for p in PRIOR_ART],
         },
+        # 8. Reference to the EU declaration of conformity.
         "8_declaration_of_conformity_reference": {
             "declaration_reference": have("declaration_of_conformity")
             or _todo("EU declaration of conformity reference"),
@@ -362,6 +388,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
                 "imply one exists. A declaration is a separate legal instrument."
             ),
         },
+        # 9. Post-market monitoring plan + energy disclosure.
         "9_post_market_monitoring_plan": {
             "post_market_monitoring": have("post_market_monitoring")
             or _todo("post-market monitoring plan"),
@@ -386,6 +413,7 @@ def derive_annex_iv(record: Dict[str, Any]) -> Dict[str, Any]:
         },
         "annex_iv": annex,
     }
+    # A self-fingerprint so the derived doc itself is tamper-evident.
     doc["generated_digest"] = _sha3(_canonical(doc))
     return doc
 
@@ -412,6 +440,7 @@ def to_markdown(doc: Dict[str, Any]) -> str:
     L.append("- Self-fingerprint (SHA3-256): `{}`".format(doc.get("generated_digest")))
     L.append("")
 
+    # Provenance banner
     L.append("## Provenance backbone (auto-derived)")
     integ = prov.get("integrity", {})
     L.append("- Receipts in chain: **{}**".format(prov.get("n_receipts")))
@@ -432,6 +461,7 @@ def to_markdown(doc: Dict[str, Any]) -> str:
     )
     L.append("")
 
+    # Nine elements
     titles = {
         "1_general_description": "1. General description of the AI system",
         "2_detailed_description_elements_and_development": (
@@ -462,6 +492,7 @@ def to_markdown(doc: Dict[str, Any]) -> str:
         L.append("```")
         L.append("")
 
+    # Prior art
     L.append("## Honest prior-art notes")
     for p in doc.get("prior_art", []):
         L.append("- **{}** — {} _{}_".format(p["name"], p["role"], p["note"]))
