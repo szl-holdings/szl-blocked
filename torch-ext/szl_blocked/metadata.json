@@ -1,0 +1,11 @@
+{
+  "name": "szl_blocked",
+  "version": "0.1.0",
+  "summary": "Honest-BLOCKED as a first-class governed-layer state + EU AI Act Annex IV auto-derivation",
+  "license": "Apache-2.0",
+  "universal": true,
+  "requires": [],
+  "doctrine": "hard security DENY dominates; advisory Lambda (Conjecture 1) can only tighten never override; BLOCKED op never executes (no fake-green); energy MEASURED-only; Annex IV output is a DRAFT skeleton, NOT legal advice",
+  "companion_package": "szl_euaiact",
+  "suite": "SZLHOLDINGS/szl-kernels"
+}
