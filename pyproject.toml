@@ -1,0 +1,10 @@
+[project]
+name = "szl-blocked"
+version = "0.1.0"
+description = "Honest-BLOCKED as a first-class governed kernel state. Software, not a trained model."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
