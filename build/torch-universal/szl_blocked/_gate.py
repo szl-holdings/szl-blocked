@@ -52,6 +52,7 @@ HONESTY
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -149,21 +150,34 @@ def _lambda_advisory_score(
     drives Λ to 0 (a single failed axis cannot be compensated by others). No
     torch dependency — operates on plain floats so the gate is inspectable in a
     torch-less env. Returns (score_or_None, k). score is None iff axes is None
-    (no advisory signal supplied — gate then does not veto).
+    (no advisory signal supplied — gate then does not veto). Explicit weights
+    must match every axis, be finite and non-negative, and include a positive
+    weight. Malformed weights raise before policy callbacks or receipts.
     """
     if axes is None:
+        if weights is not None:
+            raise ValueError("gov_weights require gov_axes")
         return (None, 0)
     xs = [float(a) for a in axes]
     k = len(xs)
-    if k == 0:
-        return (0.0, 0)
     if weights is None:
+        if k == 0:
+            return (0.0, 0)
         ws = [1.0 / k] * k
     else:
         ws = [float(w) for w in weights]
-        s = sum(ws)
-        ws = [w / s for w in ws] if s else [1.0 / k] * k
-    import math
+        if len(ws) != k:
+            raise ValueError("gov_weights must match the number of gov_axes")
+        if any(not math.isfinite(w) or w < 0.0 for w in ws):
+            raise ValueError("gov_weights must be finite and non-negative")
+        scale = max(ws, default=0.0)
+        if scale == 0.0:
+            raise ValueError("gov_weights must include a positive weight")
+        # Normalize after scaling so finite large weights cannot overflow
+        # their sum to infinity and silently erase every axis contribution.
+        scaled = [w / scale for w in ws]
+        total = sum(scaled)
+        ws = [w / total for w in scaled]
 
     acc = 0.0
     for x, w in zip(xs, ws):
@@ -243,7 +257,8 @@ class GovernedGate:
       1. HARD, deny-by-default security policy hook  (BINDING)
       2. ADVISORY Λ gate over caller governance axes  (may TIGHTEN only)
 
-    The hard layer is evaluated first and DOMINATES. If it denies, the advisory
+    Advisory input validation precedes all policy callbacks. For valid inputs,
+    the hard layer DOMINATES. If it denies, the advisory
     Λ result is still recorded for audit, but it CANNOT flip the verdict to
     ALLOW. If the hard layer allows, the advisory Λ gate may veto (tighten) the
     decision to BLOCK when its score is below threshold — recorded with
@@ -260,6 +275,8 @@ class GovernedGate:
         # with NO allow rules => everything is denied until a policy is supplied.
         self.policy: SecurityPolicy = policy if policy is not None else deny_by_default()
         self.lambda_threshold = float(lambda_threshold)
+        if not math.isfinite(self.lambda_threshold) or not 0.0 <= self.lambda_threshold <= 1.0:
+            raise ValueError("lambda_threshold must be finite and in [0, 1]")
         self.chain = chain if chain is not None else UnifiedReceiptChain()
 
     def decide(
@@ -272,16 +289,20 @@ class GovernedGate:
     ) -> GateDecision:
         """Evaluate hard policy + advisory Λ and emit ONE decision receipt.
 
-        Returns a GateDecision. Always emits exactly one receipt (ALLOW or
-        BLOCK) into the shared chain, in call order, BEFORE any wrapped op runs.
+        Valid inputs return a GateDecision and emit exactly one receipt (ALLOW
+        or BLOCK), in call order, BEFORE any wrapped op runs. Malformed advisory
+        inputs raise before policy callbacks or receipt emission.
         """
         ctx = dict(request or {})
+
+        # Validate advisory inputs before calling policy or emitting receipts.
+        # Validation grants no authority; the hard decision still dominates.
+        score, k = _lambda_advisory_score(gov_axes, gov_weights)
 
         # 1. HARD security policy (binding, deny-by-default, deny dominates).
         pol = self.policy(ctx)
 
         # 2. ADVISORY Λ gate (records; can only tighten an ALLOW).
-        score, k = _lambda_advisory_score(gov_axes, gov_weights)
         if score is None:
             adv_passed = True  # no advisory signal supplied => no veto
             adv = {
