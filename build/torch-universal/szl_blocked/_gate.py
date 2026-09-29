@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import math
 import time
+import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ._chain import UnifiedReceiptChain
@@ -73,6 +74,47 @@ DENY = "DENY"
 ABSTAIN = "ABSTAIN"
 POLICY_VERDICTS = (ALLOW, DENY, ABSTAIN)
 _DEFAULT_CODES = {ALLOW: "OK", DENY: "DENY", ABSTAIN: "ABSTAIN"}
+
+# The advisory threshold θ used when a caller does not pass ``lambda_threshold``.
+# It predates the szl.lambda/v1 contract and differs from the admit contract's
+# policy_tau 0.8 (szl-lambda-gate frontier/model_admit_contract.v1.json): at
+# θ = 0.5, hidden_weak (Λ 0.7653) passes. Relying on it therefore warns. The
+# value is unchanged, so an implicit θ decides exactly like an explicit 0.5.
+_IMPLICIT_LAMBDA_THRESHOLD = 0.5
+_IMPLICIT_THRESHOLD_MESSAGE = (
+    "{where}: lambda_threshold not given; using the implicit advisory threshold "
+    "0.5, which differs from the admit contract's policy_tau 0.8. Pass "
+    "lambda_threshold explicitly; the implicit default is deprecated."
+)
+
+
+class _ImplicitThreshold:
+    """Default-argument sentinel: the caller did not pass ``lambda_threshold``."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<implicit lambda_threshold 0.5>"
+
+
+_IMPLICIT = _ImplicitThreshold()
+
+
+def _resolve_threshold(value: Any, where: str) -> Any:
+    """Return the implicit θ, with a DeprecationWarning, when none was given.
+
+    Any value the caller passed, including ``None``, is returned untouched for
+    the usual validation. ``stacklevel=3`` attributes the warning to the code
+    that called ``GovernedGate`` or ``governed_call``, not to this module.
+    """
+    if value is _IMPLICIT:
+        warnings.warn(
+            _IMPLICIT_THRESHOLD_MESSAGE.format(where=where),
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return _IMPLICIT_LAMBDA_THRESHOLD
+    return value
 
 
 class PolicyResult:
@@ -292,14 +334,20 @@ class GovernedGate:
     ALLOW. If the hard layer allows, the advisory Λ gate may veto (tighten) the
     decision to BLOCK when its score is below threshold — recorded with
     ``dominant=ADVISORY_LAMBDA``. Advisory Λ NEVER manufactures an ALLOW.
+
+    Pass ``lambda_threshold`` explicitly. Without it the gate uses the implicit
+    advisory θ = 0.5 and emits a ``DeprecationWarning``, because 0.5 differs
+    from the admit contract's policy_tau 0.8. The decision is the same as with
+    an explicit 0.5.
     """
 
     def __init__(
         self,
         policy: Optional[SecurityPolicy] = None,
-        lambda_threshold: float = 0.5,
+        lambda_threshold: Union[float, _ImplicitThreshold] = _IMPLICIT,
         chain: Optional[UnifiedReceiptChain] = None,
     ) -> None:
+        lambda_threshold = _resolve_threshold(lambda_threshold, "GovernedGate")
         # Default hard policy is the strictest possible: pure deny-by-default
         # with NO allow rules => everything is denied until a policy is supplied.
         self.policy: SecurityPolicy = policy if policy is not None else deny_by_default()
@@ -497,7 +545,7 @@ def governed_call(
     request: Optional[Dict[str, Any]] = None,
     gov_axes: Optional[List[float]] = None,
     gov_weights: Optional[List[float]] = None,
-    lambda_threshold: float = 0.5,
+    lambda_threshold: Union[float, _ImplicitThreshold] = _IMPLICIT,
     args: Tuple[Any, ...] = (),
     kwargs: Optional[Dict[str, Any]] = None,
     kernel: str = "governed_gate",
@@ -514,7 +562,11 @@ def governed_call(
 
     Returns ``AllowedResult`` or ``BlockedResult`` — both first-class. The caller
     inspects ``.blocked`` / ``.allowed`` and uses ``.output`` only when allowed.
+
+    As with ``GovernedGate``, omitting ``lambda_threshold`` uses the implicit
+    advisory θ = 0.5 and emits one ``DeprecationWarning``.
     """
+    lambda_threshold = _resolve_threshold(lambda_threshold, "governed_call")
     gate = GovernedGate(
         policy=policy, lambda_threshold=lambda_threshold, chain=chain
     )
