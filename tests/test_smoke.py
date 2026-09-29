@@ -7,7 +7,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "torch-ext"))
 
-from szl_blocked import UnifiedReceiptChain, deny_if_action_in, governed_call
+from szl_blocked import (
+    UnifiedReceiptChain,
+    allow_if_capability,
+    deny_by_default,
+    deny_if_action_in,
+    governed_call,
+)
 
 
 def test_import_and_honest_block():
@@ -17,18 +23,23 @@ def test_import_and_honest_block():
         ran["n"] += 1
         return v * 2
 
-    policy = deny_if_action_in({"exfiltrate", "delete_all"})
+    # An explicit ALLOW plus a hard deny: a deny rule alone never grants.
+    policy = deny_by_default(
+        [allow_if_capability("smoke"), deny_if_action_in({"exfiltrate", "delete_all"})]
+    )
     chain = UnifiedReceiptChain()
 
     blocked = governed_call(
-        fn, policy=policy, chain=chain, request={"action": "exfiltrate"}, args=(21,)
+        fn, policy=policy, chain=chain,
+        request={"capabilities": ["smoke"], "action": "exfiltrate"}, args=(21,),
     )
     assert blocked.blocked is True
     assert blocked.output is None
     assert ran["n"] == 0
 
     allowed = governed_call(
-        fn, policy=policy, chain=chain, request={"action": "summarize"}, args=(21,)
+        fn, policy=policy, chain=chain,
+        request={"capabilities": ["smoke"], "action": "summarize"}, args=(21,),
     )
     assert allowed.blocked is False
     assert allowed.output == 42
