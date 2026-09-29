@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ._chain import UnifiedReceiptChain
 
@@ -67,32 +67,55 @@ DOMINANT_HARD = "HARD_SECURITY"
 DOMINANT_ADVISORY = "ADVISORY_LAMBDA"
 DOMINANT_NONE = "NONE"
 
+# Hard-rule verdicts (tri-state). Only an explicit ALLOW grants permission, a
+# DENY dominates, and ABSTAIN means the rule did not fire: it speaks for nothing.
+DENY = "DENY"
+ABSTAIN = "ABSTAIN"
+POLICY_VERDICTS = (ALLOW, DENY, ABSTAIN)
+_DEFAULT_CODES = {ALLOW: "OK", DENY: "DENY", ABSTAIN: "ABSTAIN"}
+
 
 class PolicyResult:
-    """Result of a HARD, deny-by-default security policy hook.
+    """Result of a HARD, deny-by-default security policy hook or rule.
 
-    ``allow`` is the binding decision of the hard layer. ``reason`` is a short
-    human string. ``code`` is a stable machine token (e.g. ``"OK"``,
-    ``"DENY_DEFAULT"``, ``"DENY_RULE:no_exfil"``). ``detail`` is a JSON-able dict
-    of honest, reproducible context (never fabricated).
+    ``verdict`` is ``ALLOW``, ``DENY`` or ``ABSTAIN``. ``allow`` is derived
+    (``verdict == ALLOW``) and read-only, so an abstention never reads as a
+    pass. The first argument takes a verdict string or, as before, a bool
+    (``True`` -> ALLOW, ``False`` -> DENY); an unknown verdict string raises.
+    ``reason`` is a short human string. ``code`` is a stable machine token
+    (e.g. ``"OK"``, ``"DENY_DEFAULT"``, ``"DENY_RULE:no_exfil"``). ``detail``
+    is a JSON-able dict of honest, reproducible context (never fabricated).
     """
 
-    __slots__ = ("allow", "reason", "code", "detail")
+    __slots__ = ("verdict", "reason", "code", "detail")
 
     def __init__(
         self,
-        allow: bool,
+        allow: Union[bool, str],
         reason: str,
         code: str = "",
         detail: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.allow = bool(allow)
+        if isinstance(allow, str):
+            if allow not in POLICY_VERDICTS:
+                raise ValueError(
+                    "PolicyResult verdict must be one of ALLOW, DENY, ABSTAIN; "
+                    "got {!r}".format(allow)
+                )
+            self.verdict = allow
+        else:
+            self.verdict = ALLOW if bool(allow) else DENY
         self.reason = str(reason)
-        self.code = str(code) if code else ("OK" if allow else "DENY")
+        self.code = str(code) if code else _DEFAULT_CODES[self.verdict]
         self.detail = dict(detail or {})
+
+    @property
+    def allow(self) -> bool:
+        return self.verdict == ALLOW
 
     def as_dict(self) -> Dict[str, Any]:
         return {
+            "verdict": self.verdict,
             "allow": self.allow,
             "reason": self.reason,
             "code": self.code,
@@ -105,13 +128,16 @@ SecurityPolicy = Callable[[Dict[str, Any]], PolicyResult]
 
 
 def deny_by_default(rules: Optional[List[SecurityPolicy]] = None) -> SecurityPolicy:
-    """Build a HARD, deny-by-default security policy from allow/deny rules.
+    """Build a HARD, deny-by-default security policy from tri-state rules.
 
-    Doctrine: the DEFAULT is DENY. A request is allowed ONLY if at least one
-    rule explicitly returns ``allow=True`` AND no rule returns ``allow=False``.
-    Any single hard DENY dominates (deny wins), and absence of an explicit ALLOW
-    is itself a DENY (``DENY_DEFAULT``). This is the opposite of the
-    optimize-throughput default and is what makes refusal the safe ground state.
+    Doctrine: the DEFAULT is DENY. Each rule answers ALLOW, DENY or ABSTAIN. A
+    request is allowed ONLY if at least one rule answers an explicit ALLOW AND
+    no rule answers DENY. Any single hard DENY dominates (deny wins), and
+    absence of an explicit ALLOW is itself a DENY (``DENY_DEFAULT``). A rule
+    that does not fire ABSTAINS and counts for nothing, so a policy made only
+    of deny rules denies rather than allowing every request that trips none of
+    them. This is the opposite of the optimize-throughput default and is what
+    makes refusal the safe ground state.
     """
     rules = list(rules or [])
 
@@ -119,23 +145,26 @@ def deny_by_default(rules: Optional[List[SecurityPolicy]] = None) -> SecurityPol
         explicit_allow = False
         for rule in rules:
             r = rule(ctx)
-            if not r.allow:
-                # First hard DENY dominates immediately.
+            if r.verdict == ALLOW:
+                explicit_allow = True
+            elif r.verdict != ABSTAIN:
+                # First hard DENY (or unrecognised verdict) dominates immediately.
                 return PolicyResult(
-                    False,
+                    DENY,
                     r.reason or "hard security rule denied",
                     code=r.code or "DENY_RULE",
                     detail=r.detail,
                 )
-            explicit_allow = True
         if not explicit_allow:
             return PolicyResult(
-                False,
+                DENY,
                 "deny-by-default: no explicit hard ALLOW rule matched",
                 code="DENY_DEFAULT",
                 detail={"n_rules": len(rules)},
             )
-        return PolicyResult(True, "all hard security rules allowed", code="OK")
+        return PolicyResult(
+            ALLOW, "an explicit hard ALLOW matched and no hard rule denied", code="OK"
+        )
 
     return _policy
 
@@ -327,7 +356,11 @@ class GovernedGate:
         if not pol.allow:
             verdict = BLOCK
             dominant = DOMINANT_HARD
-            reason = "HARD security policy DENY: " + pol.reason
+            if pol.verdict == ABSTAIN:
+                # A policy that only abstains grants nothing: deny-by-default.
+                reason = "HARD security policy abstained (deny-by-default): " + pol.reason
+            else:
+                reason = "HARD security policy DENY: " + pol.reason
         elif not adv_passed:
             verdict = BLOCK
             dominant = DOMINANT_ADVISORY
