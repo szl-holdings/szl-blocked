@@ -4,6 +4,8 @@
 
 Source is this GitHub tree. Hub mirror: [`kernels/SZLHOLDINGS/szl-blocked`](https://huggingface.co/kernels/SZLHOLDINGS/szl-blocked). Card: [`SZLHOLDINGS/szl-blocked`](https://huggingface.co/SZLHOLDINGS/szl-blocked).
 
+The [source-bound runtime publication contract](docs/hf-runtime-publication.md) describes the canonical writer, exact-source admission, asset preservation, and publication readback.
+
 Public maturity stays limited while Hub residue (`model.joblib` if still listed) is quarantined and while product claims are forbidden by [szl-hf-frontier#7](https://github.com/szl-holdings/szl-hf-frontier/issues/7).
 
 ## What this is NOT
