@@ -49,6 +49,9 @@ COPIES = ["torch-ext", "build/torch-universal"]
 FIXTURES = ROOT / "tests" / "fixtures"
 VECTORS_PATH = FIXTURES / "lambda_v1_vectors.json"
 SOURCE_PATH = FIXTURES / "lambda_v1_vectors.SOURCE"
+PINNED_COMMIT = "6a874e11ab948a47e982be3651b8021ba6b82e19"
+PINNED_CANONICAL_SHA256 = "61bfb0410b9f0eaab0eb9f22f29cb7cb13cfde8c083fe308d895565d6ba9ebd4"
+PINNED_BLOB_SHA1 = "d99cc31298b8fad424d6783bdd2295ca9d7adab2"
 
 VECTORS_DOC = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
 VECTORS = VECTORS_DOC["vectors"]
@@ -108,12 +111,15 @@ def _read_source():
 def test_vendored_vectors_match_their_source_record():
     source = _read_source()
     assert source["repo"] == "szl-holdings/szl-lambda-gate"
-    assert re.fullmatch(r"[0-9a-f]{40}", source["commit"])
+    assert source["commit"] == PINNED_COMMIT
     assert source["path"] == "spec/lambda_v1_vectors.json"
-    assert _canonical_sha256(VECTORS_DOC) == source["canonical_sha256"]
+    assert source["pull_request"] == "https://github.com/szl-holdings/szl-lambda-gate/pull/55"
+    assert _canonical_sha256(VECTORS_DOC) == source["canonical_sha256"] == PINNED_CANONICAL_SHA256
     lf_bytes = VECTORS_PATH.read_bytes().replace(b"\r\n", b"\n")
     assert hashlib.sha256(lf_bytes).hexdigest() == source["lf_bytes_sha256"]
-    assert int(source["vectors"]) == len(VECTORS) == 50
+    blob_header = f"blob {len(lf_bytes)}\0".encode("ascii")
+    assert hashlib.sha1(blob_header + lf_bytes).hexdigest() == source["git_blob_sha1"] == PINNED_BLOB_SHA1
+    assert int(source["vectors"]) == len(VECTORS) == 60
 
 
 def test_vectors_are_the_v1_schema_with_unique_ids():
@@ -154,6 +160,18 @@ LAMBDA_DIVERGENCE = {
     "negative_axis": ("value", 0.0),
     "precedence_nonfinite_before_range_a": ("value", 0.0),
     "precedence_nonfinite_before_range_b": ("value", 0.0),
+    # A zero axis masks an invalid neighbor in this legacy advisory kernel.
+    # v1 refuses all ten rows after validating every axis before scoring.
+    "precedence_zero_does_not_mask_nan_a": ("value", 0.0),
+    "precedence_zero_does_not_mask_nan_b": ("value", 0.0),
+    "precedence_zero_does_not_mask_pos_inf_a": ("value", 0.0),
+    "precedence_zero_does_not_mask_pos_inf_b": ("value", 0.0),
+    "precedence_zero_does_not_mask_x_gt_1_a": ("value", 0.0),
+    "precedence_zero_does_not_mask_x_gt_1_b": ("value", 0.0),
+    "precedence_zero_does_not_mask_negative_a": ("value", 0.0),
+    "precedence_zero_does_not_mask_negative_b": ("value", 0.0),
+    "precedence_zero_does_not_mask_bool_a": ("value", 0.0),
+    "precedence_zero_does_not_mask_bool_b": ("value", 0.0),
     # E5 renormalisation: weights off the unit sum are rescaled, not refused.
     "w_unnormalised_2_2": ("value", 0.7200000000000001),
     "weight_sum_outside_tol": ("value", 0.6708203932505283),
@@ -263,6 +281,17 @@ GATE_DIVERGENCE = {
     "negative_axis": BLOCK_OUTCOME,
     "precedence_nonfinite_before_range_a": BLOCK_OUTCOME,
     "precedence_nonfinite_before_range_b": BLOCK_OUTCOME,
+    # The gate blocks on score 0.0 instead of refusing the invalid neighbor.
+    "precedence_zero_does_not_mask_nan_a": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_nan_b": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_pos_inf_a": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_pos_inf_b": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_x_gt_1_a": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_x_gt_1_b": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_negative_a": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_negative_b": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_bool_a": BLOCK_OUTCOME,
+    "precedence_zero_does_not_mask_bool_b": BLOCK_OUTCOME,
     "w_unnormalised_2_2": BLOCK_OUTCOME,  # renormalised to 0.72 < 0.8
     "weight_sum_outside_tol": BLOCK_OUTCOME,  # renormalised to 0.6708 < 0.8
     "w_zero_weight": BLOCK_OUTCOME,  # 0.5 < 0.8
