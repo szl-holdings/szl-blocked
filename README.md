@@ -17,7 +17,7 @@
 
 Source is this GitHub tree. Hub mirror: [`kernels/SZLHOLDINGS/szl-blocked`](https://huggingface.co/kernels/SZLHOLDINGS/szl-blocked). Card: [`SZLHOLDINGS/szl-blocked`](https://huggingface.co/SZLHOLDINGS/szl-blocked).
 
-The [source-bound runtime publication contract](docs/hf-runtime-publication.md) describes the canonical writer, exact-source admission, asset preservation, and publication readback.
+The only writer of both Hub repositories is [`hf-kernel-publish`](.github/workflows/hf-kernel-publish.yml), configured in [`.github/hf-kernels.json`](.github/hf-kernels.json). A published release builds `build/torch-cpu` and `build/torch-universal` from `torch-ext/` at the release commit, pushes them fast-forward to the kernel repo's `main` and `v1` branches, verifies the result through `get_kernel` in a fresh job, and only then turns the model repository into a pointer card. A weekly job re-verifies what the Hub serves.
 
 Public maturity stays limited while Hub residue (`model.joblib` if still listed) is quarantined and while product claims are forbidden by [szl-hf-frontier#7](https://github.com/szl-holdings/szl-hf-frontier/issues/7).
 
@@ -31,30 +31,36 @@ Public maturity stays limited while Hub residue (`model.joblib` if still listed)
 
 ## Load
 
-Set `SZL_BLOCKED_HF_REVISION` to the immutable **first-class Kernel Hub** commit
-from a verified publication of [`kernels/SZLHOLDINGS/szl-blocked`](https://huggingface.co/kernels/SZLHOLDINGS/szl-blocked). Use the `kernels`
-client version qualified with that publication. The GitHub source commit,
-model-type mirror commit, and Kernel Hub commit are separate identities.
-An observed head, a branch name, or a successful import does not qualify a release.
-
-`trust_remote_code=True` permits execution of the selected repository's Python.
-Review that exact revision, its provenance and publication evidence before enabling it.
-The format check below only rejects missing or mutable revision inputs; it does not
-verify hashes, publisher authorization or compatibility. If that evidence is unavailable,
-stop the Hub load and use separately reviewed local source for development.
-
 ```python
-import os
-import re
-
-hf_revision = os.environ.get("SZL_BLOCKED_HF_REVISION", "")
-if re.fullmatch(r"[0-9a-f]{40}", hf_revision) is None:
-    raise ValueError("A verified immutable Kernel Hub revision is required")
-
+# pip install "kernels>=0.17.2" torch
 from kernels import get_kernel
 
-get_kernel("SZLHOLDINGS/szl-blocked", revision=hf_revision, trust_remote_code=True)
+blocked = get_kernel("SZLHOLDINGS/szl-blocked", version=1, trust_remote_code=True)
 ```
+
+`version=1` resolves the `v1` branch of the first-class kernel repository
+[`kernels/SZLHOLDINGS/szl-blocked`](https://huggingface.co/kernels/SZLHOLDINGS/szl-blocked),
+the stable API channel republished from this repository on every release. CPU hosts load
+`build/torch-cpu`; CUDA and other hosts load `build/torch-universal`; both carry the same
+bytes. The companion `szl_euaiact` package ships beside `szl_blocked` in each variant (the
+[kernel card](hf/kernel-card.md) shows how to load it).
+
+`trust_remote_code=True` permits execution of the selected repository's Python; the
+narrowest form is `trust_remote_code=["SZLHOLDINGS/szl-blocked"]`. Review the GitHub source
+commit named in the Hub's `SZL_KERNEL_SOURCE.json` before enabling it. For production, pin
+an immutable kernel-repo commit of `v1` instead of the branch:
+
+```python
+from huggingface_hub import HfApi
+from kernels import get_kernel
+
+refs = HfApi().list_repo_refs("SZLHOLDINGS/szl-blocked", repo_type="kernel")
+pin = next(b.target_commit for b in refs.branches if b.name == "v1")
+blocked = get_kernel("SZLHOLDINGS/szl-blocked", revision=pin, trust_remote_code=["SZLHOLDINGS/szl-blocked"])
+```
+
+The GitHub source commit, the model-repository commit and the kernel-repo commit are
+separate identities; only the last one is a kernel revision.
 
 A successful load is not a product qualification.
 
