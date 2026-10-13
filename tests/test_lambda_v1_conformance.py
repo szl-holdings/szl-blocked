@@ -4,7 +4,7 @@
 
 The vectors are vendored from szl-lambda-gate (see
 ``tests/fixtures/lambda_v1_vectors.SOURCE``). Two layers are checked, each
-against both shipped copies of the kernel:
+against every shipped copy of the kernel (see conftest.py):
 
 * **Λ layer.** ``_gate._lambda_advisory_score(axes, weights)`` must give each
   vector's Λ within its ``value_tol``, or refuse with a ``ValueError`` whose
@@ -45,7 +45,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-COPIES = ["torch-ext", "build/torch-universal"]
+COPIES = ["torch-ext", "build/torch-cpu", "build/torch-universal"]  # see conftest.py
 FIXTURES = ROOT / "tests" / "fixtures"
 VECTORS_PATH = FIXTURES / "lambda_v1_vectors.json"
 SOURCE_PATH = FIXTURES / "lambda_v1_vectors.SOURCE"
@@ -61,9 +61,9 @@ ERROR_IDS = {v["id"] for v in VECTORS if "error" in v["expect"]}
 
 
 @pytest.fixture(params=COPIES)
-def kernel(request):
+def kernel(request, shipped_root):
     name = "_conformance_" + request.param.replace("/", "_").replace("-", "_")
-    package = ROOT / request.param / "szl_blocked"
+    package = shipped_root(request.param) / "szl_blocked"
     spec = importlib.util.spec_from_file_location(
         name, package / "__init__.py", submodule_search_locations=[str(package)]
     )

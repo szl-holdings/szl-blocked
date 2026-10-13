@@ -9,12 +9,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+COPIES = ["torch-ext", "build/torch-cpu", "build/torch-universal"]  # see conftest.py
 
 
-@pytest.fixture(params=["torch-ext", "build/torch-universal"])
-def kernel(request):
+@pytest.fixture(params=COPIES)
+def kernel(request, shipped_root):
     name = "_admission_" + request.param.replace("/", "_").replace("-", "_")
-    package = ROOT / request.param / "szl_blocked"
+    package = shipped_root(request.param) / "szl_blocked"
     spec = importlib.util.spec_from_file_location(
         name, package / "__init__.py", submodule_search_locations=[str(package)]
     )
@@ -107,7 +108,7 @@ def test_hard_deny_still_dominates_valid_advisory(kernel):
     assert calls == []
 
 
-def test_mirrored_gate_sources_are_exact_bytes():
-    assert (ROOT / "torch-ext/szl_blocked/_gate.py").read_bytes() == (
-        ROOT / "build/torch-universal/szl_blocked/_gate.py"
-    ).read_bytes()
+@pytest.mark.parametrize("copy", COPIES[1:])
+def test_mirrored_gate_sources_are_exact_bytes(copy, shipped_root):
+    source = (ROOT / "torch-ext/szl_blocked/_gate.py").read_bytes().replace(b"\r\n", b"\n")
+    assert (shipped_root(copy) / "szl_blocked/_gate.py").read_bytes() == source

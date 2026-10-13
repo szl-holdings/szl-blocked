@@ -1,0 +1,44 @@
+{
+  "schema": "szl.hf-kernels/v1",
+  "$comment": "Consumed by .github/workflows/hf-kernel-publish.yml via scripts/szl_kernel_publish.py. This repository is the single source of the Hub kernel repo SZLHOLDINGS/szl-blocked and the only writer of it and of its model-repo twin. Kernel major (version) is the v<major> API channel, not the release semver.",
+  "kernels": [
+    {
+      "repo_id": "SZLHOLDINGS/szl-blocked",
+      "name": "szl-blocked",
+      "version": 1,
+      "license": "Apache-2.0",
+      "source_repository": "szl-holdings/szl-blocked",
+      "packages": [
+        { "src": "torch-ext/szl_blocked", "name": "szl_blocked" },
+        { "src": "torch-ext/szl_euaiact", "name": "szl_euaiact" }
+      ],
+      "card": "hf/kernel-card.md",
+      "license_file": "LICENSE",
+      "extra_files": {},
+      "$why_prune_paths": "Hub-only plates seen on kernel main 3be2b2a7 (2026-10-13): OPERATIONAL.json and BENCH.laptop-blackwell.json are 2026-08-29 laptop plates that advertise revision=\"main\" with kernels 0.16.1; SZL_SOURCE_BINDING.json is the retired runtime lane's binding, superseded by SZL_KERNEL_SOURCE.json.",
+      "prune_paths": [
+        "OPERATIONAL.json",
+        "BENCH.laptop-blackwell.json",
+        "SZL_SOURCE_BINDING.json"
+      ],
+      "python_depends": [],
+      "smoke": "hf/kernel_smoke.py",
+      "model_twin": {
+        "repo_id": "SZLHOLDINGS/szl-blocked",
+        "mode": "pointer",
+        "card": "hf/model-twin-pointer.md",
+        "$why_prune_paths": "Seen on model main 1bfc449f (2026-10-13). build/ and torch-ext/ are never loaded by kernels>=0.16 (its torch-cpu variant even lacked szl_euaiact); the plates and binding are the same stale files as on the kernel repo; scripts/ and build.toml are stale code/config copies that differ from GitHub; model.joblib stays quarantined (absent today, kept absent). BOM, receipts, provenance, SECURITY.md, LICENSE and the banner are kept.",
+        "prune_paths": [
+          "build/",
+          "torch-ext/",
+          "scripts/",
+          "build.toml",
+          "model.joblib",
+          "OPERATIONAL.json",
+          "BENCH.laptop-blackwell.json",
+          "SZL_SOURCE_BINDING.json"
+        ]
+      }
+    }
+  ]
+}

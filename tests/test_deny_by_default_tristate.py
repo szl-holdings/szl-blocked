@@ -16,13 +16,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-COPIES = ["torch-ext", "build/torch-universal"]
+COPIES = ["torch-ext", "build/torch-cpu", "build/torch-universal"]  # see conftest.py
 
 
 @pytest.fixture(params=COPIES)
-def kernel(request):
+def kernel(request, shipped_root):
     name = "_tristate_" + request.param.replace("/", "_").replace("-", "_")
-    package = ROOT / request.param / "szl_blocked"
+    package = shipped_root(request.param) / "szl_blocked"
     spec = importlib.util.spec_from_file_location(
         name, package / "__init__.py", submodule_search_locations=[str(package)]
     )
@@ -218,10 +218,10 @@ def test_governed_call_with_allow_plus_quiet_deny_runs(kernel):
     assert res.allowed is True and res.output == 42
 
 
-# -- both shipped copies stay byte-identical ----------------------------------
+# -- every shipped copy is the source, byte for byte --------------------------
 
+@pytest.mark.parametrize("copy", COPIES[1:])
 @pytest.mark.parametrize("name", ["_gate.py", "_rules.py"])
-def test_mirrored_sources_are_exact_bytes(name):
-    assert (ROOT / "torch-ext/szl_blocked" / name).read_bytes() == (
-        ROOT / "build/torch-universal/szl_blocked" / name
-    ).read_bytes()
+def test_mirrored_sources_are_exact_bytes(name, copy, shipped_root):
+    source = (ROOT / "torch-ext/szl_blocked" / name).read_bytes().replace(b"\r\n", b"\n")
+    assert (shipped_root(copy) / "szl_blocked" / name).read_bytes() == source
