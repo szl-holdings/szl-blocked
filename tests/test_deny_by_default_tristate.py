@@ -107,6 +107,40 @@ def test_allow_if_capability_abstains_rather_than_denies(kernel):
     assert missing.detail == {"required": "run_norm", "have": ["read_public"]}
 
 
+@pytest.mark.parametrize("caps", ["bread", "read", {"read": False}, {"read": True},
+                                 b"read", 1, True, ["read", None], ["read", ""]])
+def test_malformed_capabilities_block_even_after_another_allow(kernel, caps):
+    calls = []
+    chain = kernel.UnifiedReceiptChain()
+    policy = kernel.deny_by_default([
+        lambda ctx: kernel.PolicyResult("ALLOW", "other explicit rule"),
+        kernel.allow_if_capability("read"),
+    ])
+    result = kernel.governed_call(
+        lambda: calls.append("operation"), policy=policy, chain=chain,
+        request={"capabilities": caps}, lambda_threshold=0.9,
+    )
+    assert result.blocked and result.output is None
+    assert calls == []
+    assert result.decision.dominant == kernel.DOMINANT_HARD
+    assert result.decision.policy["code"] == "DENY_INVALID_CAPABILITIES"
+    assert result.receipt["attrs"]["hard_code"] == "DENY_INVALID_CAPABILITIES"
+    assert chain.count() == 1
+
+
+@pytest.mark.parametrize("caps", [["read"], ("read",), {"read"}, frozenset({"read"})])
+def test_capability_collections_keep_exact_membership(kernel, caps):
+    rule = kernel.allow_if_capability("read")
+    assert rule({"capabilities": caps}).verdict == "ALLOW"
+    assert rule({"capabilities": ["bread"]}).verdict == "ABSTAIN"
+
+
+@pytest.mark.parametrize("required", ["", None, 1, True])
+def test_invalid_required_capability_rejected_at_configuration(kernel, required):
+    with pytest.raises(ValueError, match="required"):
+        kernel.allow_if_capability(required)
+
+
 # -- deny_by_default over tri-state rules -------------------------------------
 
 def test_deny_only_policy_gives_deny_default(kernel):
