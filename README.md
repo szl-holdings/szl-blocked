@@ -64,6 +64,11 @@ separate identities; only the last one is a kernel revision.
 
 A successful load is not a product qualification.
 
+`allow_if_capability(required)` matches an exact, nonempty capability name in a
+list, tuple, set, or frozenset of nonempty strings. Missing or `None` capabilities
+abstain; malformed collections return hard `DENY_INVALID_CAPABILITIES` before
+the governed operation runs. Strings and mappings are not capability grants.
+
 Doctrine v11. Λ = Conjecture 1 (advisory, never a theorem). Apache-2.0. Owner: Stephen Lutar / SZL Holdings.
 
 ## Source-only development

@@ -24,10 +24,24 @@ def allow_if_capability(required: str) -> SecurityPolicy:
     falls through to DENY_DEFAULT rather than a hard rule-deny, unless another
     rule explicitly allows. Several of these rules therefore mean "any of" the
     capabilities, not "all of" them.
+
+    Capabilities must be a list, tuple, set or frozenset of nonempty strings.
+    Missing/None means no capabilities. A malformed collection is a hard DENY,
+    not substring membership in a string or key membership in a mapping.
     """
+    if not isinstance(required, str) or not required:
+        raise ValueError("required capability must be a nonempty string")
 
     def _rule(ctx: Dict[str, Any]) -> PolicyResult:
-        caps = ctx.get("capabilities") or []
+        caps = ctx.get("capabilities")
+        if caps is None:
+            caps = []
+        if (not isinstance(caps, (list, tuple, set, frozenset))
+                or any(not isinstance(cap, str) or not cap for cap in caps)):
+            return PolicyResult(
+                DENY, "capabilities must be a collection of nonempty strings",
+                code="DENY_INVALID_CAPABILITIES", detail={"required": required},
+            )
         if required in caps:
             return PolicyResult(
                 ALLOW, "capability granted: " + required, code="OK"
