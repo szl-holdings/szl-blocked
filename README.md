@@ -89,3 +89,6 @@ This selects local Python source rather than calling the Hub loader. Importing l
 source also executes Python. This documentation check does not run that import,
 install dependencies, qualify a runtime or establish a Hub publication.
 
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
