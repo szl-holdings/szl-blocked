@@ -95,3 +95,11 @@ Commits of the model repository
 - No measured latency, CUDA speedup, tokens/s or joules are claimed.
 - A successful load or an ALLOW receipt is not a product qualification or a certificate
   for the surrounding application.
+
+## Card completeness (2026-11-12)
+
+This section adds required card sections the card above did not have. It states only what files in this repository and the estate's own receipt datasets show; nothing here is a new result.
+
+### Benchmarks
+
+Not yet benchmarked. As of 2026-11-12 this repository has no benchmark results (latency, throughput or correctness-vs-reference timings). Published builds: `torch-cpu`, `torch-universal`. No GPU build is published, so no GPU performance claim is made.
