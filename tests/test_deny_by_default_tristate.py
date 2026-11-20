@@ -72,6 +72,31 @@ def test_unknown_verdict_string_fails_closed(kernel, bad):
         kernel.PolicyResult(bad, "why")
 
 
+@pytest.mark.parametrize("bad", [1, 0, 2, float("nan"), b"ALLOW",
+                                      ["ALLOW"], {"allow": True}, object()])
+def test_nonboolean_truthy_or_falsy_verdict_never_grants(kernel, bad):
+    # Before: bool(1), bool(nan), bool(nonempty objects) silently grant ALLOW.
+    # A malformed policy is an error, never a coerced authority decision.
+    with pytest.raises(TypeError, match="PolicyResult requires bool"):
+        kernel.PolicyResult(bad, "untrusted policy input")
+
+
+def test_nonboolean_policy_verdict_never_executes_operation(kernel):
+    calls = []
+    chain = kernel.UnifiedReceiptChain()
+
+    def untrusted_policy(_request):
+        return kernel.PolicyResult(float("nan"), "nonfinite pseudo-verdict")
+
+    with pytest.raises(TypeError, match="PolicyResult requires bool"):
+        kernel.governed_call(
+            lambda: calls.append("executed"), policy=untrusted_policy,
+            chain=chain, lambda_threshold=0.8,
+        )
+    assert calls == []
+    assert chain.count() == 0  # Malformed input does not forge ALLOW receipt.
+
+
 def test_allow_cannot_drift_from_verdict(kernel):
     r = kernel.PolicyResult("ABSTAIN", "why")
     with pytest.raises(AttributeError):
