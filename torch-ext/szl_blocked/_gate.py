@@ -139,14 +139,14 @@ class PolicyResult:
         code: str = "",
         detail: Optional[Dict[str, Any]] = None,
     ) -> None:
-        if isinstance(allow, str):
+        if type(allow) is str:
             if allow not in POLICY_VERDICTS:
                 raise ValueError(
                     "PolicyResult verdict must be one of ALLOW, DENY, ABSTAIN; "
                     "got {!r}".format(allow)
                 )
             self.verdict = allow
-        elif isinstance(allow, bool):
+        elif type(allow) is bool:
             self.verdict = ALLOW if allow else DENY
         else:
             # Never turn an arbitrary truthy object (including NaN or 1) into

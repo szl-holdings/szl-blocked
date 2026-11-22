@@ -81,6 +81,37 @@ def test_nonboolean_truthy_or_falsy_verdict_never_grants(kernel, bad):
         kernel.PolicyResult(bad, "untrusted policy input")
 
 
+class ForgedVerdict(str):
+    """Hostile subclass that claims equality with the ALLOW capability."""
+
+    def __eq__(self, other):
+        return other == "ALLOW"
+
+    __hash__ = str.__hash__
+
+
+@pytest.mark.parametrize("raw", ["garbage", "ALLOW"])
+def test_string_subclass_never_becomes_hard_authority(kernel, raw):
+    with pytest.raises(TypeError, match="PolicyResult requires bool"):
+        kernel.PolicyResult(ForgedVerdict(raw), "spoofed verdict")
+
+
+def test_string_subclass_spoof_never_executes_or_writes_receipt(kernel):
+    calls = []
+    chain = kernel.UnifiedReceiptChain()
+
+    def untrusted_policy(_request):
+        return kernel.PolicyResult(ForgedVerdict("garbage"), "spoofed ALLOW")
+
+    with pytest.raises(TypeError, match="PolicyResult requires bool"):
+        kernel.governed_call(
+            lambda: calls.append("executed"), policy=untrusted_policy,
+            chain=chain, lambda_threshold=0.8,
+        )
+    assert calls == []
+    assert chain.count() == 0
+
+
 def test_nonboolean_policy_verdict_never_executes_operation(kernel):
     calls = []
     chain = kernel.UnifiedReceiptChain()
