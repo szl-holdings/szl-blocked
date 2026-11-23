@@ -122,8 +122,9 @@ class PolicyResult:
 
     ``verdict`` is ``ALLOW``, ``DENY`` or ``ABSTAIN``. ``allow`` is derived
     (``verdict == ALLOW``) and read-only, so an abstention never reads as a
-    pass. The first argument takes a verdict string or, as before, a bool
-    (``True`` -> ALLOW, ``False`` -> DENY); an unknown verdict string raises.
+    pass. The first argument takes a closed verdict string or an actual bool
+    (``True`` -> ALLOW, ``False`` -> DENY). Unknown strings raise ValueError;
+    other types raise TypeError rather than being cast via truthiness.
     ``reason`` is a short human string. ``code`` is a stable machine token
     (e.g. ``"OK"``, ``"DENY_DEFAULT"``, ``"DENY_RULE:no_exfil"``). ``detail``
     is a JSON-able dict of honest, reproducible context (never fabricated).
@@ -138,15 +139,20 @@ class PolicyResult:
         code: str = "",
         detail: Optional[Dict[str, Any]] = None,
     ) -> None:
-        if isinstance(allow, str):
+        if type(allow) is str:
             if allow not in POLICY_VERDICTS:
                 raise ValueError(
                     "PolicyResult verdict must be one of ALLOW, DENY, ABSTAIN; "
                     "got {!r}".format(allow)
                 )
             self.verdict = allow
+        elif type(allow) is bool:
+            self.verdict = ALLOW if allow else DENY
         else:
-            self.verdict = ALLOW if bool(allow) else DENY
+            # Never turn an arbitrary truthy object (including NaN or 1) into
+            # an authorization grant. Only bool and the closed verdict enum
+            # are valid policy inputs; fail before a decision receipt or op.
+            raise TypeError("PolicyResult requires bool or ALLOW/DENY/ABSTAIN")
         self.reason = str(reason)
         self.code = str(code) if code else _DEFAULT_CODES[self.verdict]
         self.detail = dict(detail or {})
