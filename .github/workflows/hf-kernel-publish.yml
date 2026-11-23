@@ -101,6 +101,55 @@ jobs:
           ONLY: ${{ inputs.only }}
         run: python scripts/szl_kernel_publish.py plan --only "$ONLY"
 
+  admission:
+    needs: plan
+    if: needs.plan.outputs.mode == 'plan' || needs.plan.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Verify protected source admission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_EVENT: ${{ github.event_name }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          EXPECTED_REF: ${{ github.ref }}
+          EXPECTED_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          SOURCE_REF: ${{ needs.plan.outputs.source_ref }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$EXPECTED_REPOSITORY" = "szl-holdings/szl-blocked"
+          test "$MODE" = "plan" -o "$MODE" = "publish"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$SOURCE_REF"
+          source_api_sha="$(gh api "repos/$EXPECTED_REPOSITORY/commits/$SOURCE_SHA" --jq '.sha')"
+          test "$source_api_sha" = "$SOURCE_SHA"
+          compare_status="$(gh api "repos/$EXPECTED_REPOSITORY/compare/$SOURCE_SHA...$DEFAULT_BRANCH" --jq '.status')"
+          case "$compare_status" in
+            ahead|identical) ;;
+            *) echo "::error::source commit is not on the protected default branch"; exit 1 ;;
+          esac
+          case "$EXPECTED_EVENT" in
+            workflow_dispatch)
+              test "$EXPECTED_REF" = "refs/heads/$DEFAULT_BRANCH"
+              test "$EXPECTED_SHA" = "$(gh api "repos/$EXPECTED_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '.object.sha')"
+              ;;
+            release)
+              test "$EXPECTED_REF" = "refs/tags/$SOURCE_REF"
+              test "$EXPECTED_SHA" = "$SOURCE_SHA"
+              ;;
+            *)
+              echo "::error::publisher admission only accepts protected dispatch or release sources"
+              exit 1
+              ;;
+          esac
+
   build:
     needs: plan
     if: needs.plan.outputs.mode == 'check' || needs.plan.outputs.mode == 'plan' || needs.plan.outputs.mode == 'publish'
@@ -144,9 +193,12 @@ jobs:
           retention-days: 30
 
   publish:
-    needs: [plan, build]
-    if: needs.plan.outputs.mode == 'plan' || needs.plan.outputs.mode == 'publish'
+    needs: [plan, build, admission]
+    if: >-
+      needs.admission.result == 'success' &&
+      (needs.plan.outputs.mode == 'plan' || needs.plan.outputs.mode == 'publish')
     runs-on: ubuntu-latest
+    environment: hub-production
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -237,9 +289,14 @@ jobs:
           retention-days: 90
 
   model-twin:
-    needs: [plan, verify]
-    if: needs.plan.outputs.mode == 'publish' && needs.verify.result == 'success' && inputs.skip_model_twin != true
+    needs: [plan, verify, admission]
+    if: >-
+      needs.admission.result == 'success' &&
+      needs.plan.outputs.mode == 'publish' &&
+      needs.verify.result == 'success' &&
+      inputs.skip_model_twin != true
     runs-on: ubuntu-latest
+    environment: hub-production
     timeout-minutes: 15
     strategy:
       fail-fast: false
